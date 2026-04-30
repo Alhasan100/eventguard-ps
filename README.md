@@ -21,6 +21,9 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Detects account lockouts
 - Detects new local user creation events
 - Detects privileged group membership changes
+- Maps findings to MITRE ATT&CK tactics and techniques
+- Includes analyst recommendations in each finding
+- Supports suppression files for known-benign rules, users, hosts, or IPs
 - Supports text and JSON output formats
 - Includes sample event data for offline testing
 
@@ -58,6 +61,12 @@ JSON report:
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.json -Format Json
 ```
 
+Report with suppressions:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.json -SuppressionsPath .\examples\suppressions.json -Format Text
+```
+
 Run tests:
 
 ```powershell
@@ -68,14 +77,14 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 
 1. Export relevant security events from a Windows host or lab VM into JSON format.
 2. Run EventGuard-PS against the exported file.
-3. Review burst failures, suspicious successful logons, account changes, and privilege changes.
+3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
 4. Use the findings as a starting point for incident triage or lab writeups.
+5. Add suppressions for approved admin activity so recurring triage reports stay focused.
 
 ## Future improvements
 
 - Add EVTX and XML ingestion support
-- Add MITRE ATT&CK mapping for each finding type
-- Add severity scoring and suppression rules
+- Add richer account and group change detections
+- Expand suppression logic with time-based exceptions and rule comments
 - Generate HTML reports for case documentation
 - Add Sigma-aligned detection packs
-

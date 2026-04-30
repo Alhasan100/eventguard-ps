@@ -23,6 +23,12 @@
 - Add allowlists and suppression support
 - Add richer group and account change detections
 
+## Progress update
+
+- Completed: ATT&CK annotations and analyst recommendations
+- Completed: suppression support for rule IDs, users, machine names, and IP addresses
+- Next: add XML or EVTX-oriented ingestion helpers and expand account/group change coverage
+
 ### Day 6
 - Add HTML export for portfolio screenshots and case documentation
 - Improve documentation and examples
@@ -31,4 +37,3 @@
 - Final cleanup
 - Hardening and test expansion
 - Interview-ready README refinements
-

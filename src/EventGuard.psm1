@@ -1,8 +1,54 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.1.0
+# Version: 0.2.0
 
 Set-StrictMode -Version Latest
+
+function Get-EventGuardRuleCatalog {
+    <#
+    .SYNOPSIS
+    Returns metadata for built-in detection rules.
+
+    .DESCRIPTION
+    Centralizes ATT&CK mappings and analyst recommendations so findings
+    stay consistent across text and JSON output.
+    #>
+    [CmdletBinding()]
+    param()
+
+    return @{
+        "EVG-4625-BURST" = @{
+            Tactic         = "Credential Access"
+            TechniqueId    = "T1110"
+            TechniqueName  = "Brute Force"
+            Recommendation = "Review the source host, confirm whether the account should receive network logons, and consider blocking or resetting credentials."
+        }
+        "EVG-4624-AFTER-4625" = @{
+            Tactic         = "Initial Access"
+            TechniqueId    = "T1078"
+            TechniqueName  = "Valid Accounts"
+            Recommendation = "Validate whether the successful logon was expected, review adjacent host activity, and rotate credentials if compromise is suspected."
+        }
+        "EVG-4740-LOCKOUT" = @{
+            Tactic         = "Impact"
+            TechniqueId    = "T1531"
+            TechniqueName  = "Account Access Removal"
+            Recommendation = "Confirm whether the lockout was caused by user error, stale services, or hostile activity before unlocking the account."
+        }
+        "EVG-4720-NEW-USER" = @{
+            Tactic         = "Persistence"
+            TechniqueId    = "T1136"
+            TechniqueName  = "Create Account"
+            Recommendation = "Verify the request path for the new account, confirm approval records, and disable the account if it was not authorized."
+        }
+        "EVG-PRIV-GROUP-CHANGE" = @{
+            Tactic         = "Privilege Escalation"
+            TechniqueId    = "T1098"
+            TechniqueName  = "Account Manipulation"
+            Recommendation = "Review the change ticket, validate the actor identity, and remove the membership if the addition was not approved."
+        }
+    }
+}
 
 function Import-EventGuardEvents {
     <#
@@ -33,6 +79,36 @@ function Import-EventGuardEvents {
     return @($events | Sort-Object -Property ParsedTimestamp)
 }
 
+function Import-EventGuardSuppressions {
+    <#
+    .SYNOPSIS
+    Loads suppression filters from a JSON file.
+
+    .DESCRIPTION
+    Reads optional suppression criteria that can hide known-benign
+    findings by rule identifier, user name, machine name, or IP address.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Suppression input file not found: $Path"
+    }
+
+    $rawContent = Get-Content -LiteralPath $Path -Raw
+    $config = $rawContent | ConvertFrom-Json
+
+    return [PSCustomObject]@{
+        RuleIds      = @($config.RuleIds)
+        Users        = @($config.Users)
+        MachineNames = @($config.MachineNames)
+        IpAddresses  = @($config.IpAddresses)
+    }
+}
+
 function New-EventGuardFinding {
     <#
     .SYNOPSIS
@@ -60,13 +136,81 @@ function New-EventGuardFinding {
         [object]$Evidence
     )
 
-    return [PSCustomObject]@{
-        RuleId   = $RuleId
-        Severity = $Severity
-        Title    = $Title
-        Summary  = $Summary
-        Evidence = $Evidence
+    $ruleCatalog = Get-EventGuardRuleCatalog
+    $ruleMetadata = $ruleCatalog[$RuleId]
+    if (-not $ruleMetadata) {
+        throw "Unknown rule metadata for RuleId: $RuleId"
     }
+
+    return [PSCustomObject]@{
+        RuleId         = $RuleId
+        Severity       = $Severity
+        Title          = $Title
+        Summary        = $Summary
+        Tactic         = $ruleMetadata.Tactic
+        TechniqueId    = $ruleMetadata.TechniqueId
+        TechniqueName  = $ruleMetadata.TechniqueName
+        Recommendation = $ruleMetadata.Recommendation
+        Evidence       = $Evidence
+    }
+}
+
+function Test-EventGuardSuppressionMatch {
+    <#
+    .SYNOPSIS
+    Determines whether a finding matches suppression criteria.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Finding,
+
+        [Parameter(Mandatory = $true)]
+        [object]$Suppressions
+    )
+
+    if ($Finding.RuleId -in $Suppressions.RuleIds) {
+        return $true
+    }
+
+    if ($Finding.Evidence.PSObject.Properties.Name -contains "UserName" -and $Finding.Evidence.UserName -in $Suppressions.Users) {
+        return $true
+    }
+
+    if ($Finding.Evidence.PSObject.Properties.Name -contains "MachineName" -and $Finding.Evidence.MachineName -in $Suppressions.MachineNames) {
+        return $true
+    }
+
+    if ($Finding.Evidence.PSObject.Properties.Name -contains "IpAddress" -and $Finding.Evidence.IpAddress -in $Suppressions.IpAddresses) {
+        return $true
+    }
+
+    return $false
+}
+
+function Remove-SuppressedEventGuardFindings {
+    <#
+    .SYNOPSIS
+    Filters findings using optional suppression criteria.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Findings,
+
+        [Parameter(Mandatory = $false)]
+        [object]$Suppressions
+    )
+
+    if (-not $Suppressions) {
+        return @($Findings)
+    }
+
+    return @(
+        $Findings | Where-Object {
+            -not (Test-EventGuardSuppressionMatch -Finding $_ -Suppressions $Suppressions)
+        }
+    )
 }
 
 function Find-FailedLogonBursts {
@@ -282,7 +426,9 @@ function Format-EventGuardTextReport {
     foreach ($finding in $Report.Findings) {
         $lines += "[$($finding.Severity)] $($finding.Title)"
         $lines += "Rule: $($finding.RuleId)"
+        $lines += "ATT&CK: $($finding.Tactic) / $($finding.TechniqueId) $($finding.TechniqueName)"
         $lines += "Summary: $($finding.Summary)"
+        $lines += "Recommendation: $($finding.Recommendation)"
         $lines += "Evidence: $($finding.Evidence | ConvertTo-Json -Compress)"
         $lines += ""
     }
@@ -302,10 +448,17 @@ function Invoke-EventGuardScan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Path
+        [string]$Path,
+
+        [string]$SuppressionsPath
     )
 
     $events = Import-EventGuardEvents -Path $Path
+    $suppressions = $null
+    if ($SuppressionsPath) {
+        $suppressions = Import-EventGuardSuppressions -Path $SuppressionsPath
+    }
+
     $findings = @()
     $findings += Find-FailedLogonBursts -Events $events
     $findings += Find-SuccessAfterFailures -Events $events
@@ -313,7 +466,8 @@ function Invoke-EventGuardScan {
     $findings += Find-NewUsers -Events $events
     $findings += Find-PrivilegedGroupChanges -Events $events
 
-    $sortedFindings = @($findings | Sort-Object -Property Severity, RuleId)
+    $filteredFindings = Remove-SuppressedEventGuardFindings -Findings $findings -Suppressions $suppressions
+    $sortedFindings = @($filteredFindings | Sort-Object -Property Severity, RuleId)
     $severitySummary = [PSCustomObject]@{
         High   = @($sortedFindings | Where-Object { $_.Severity -eq "High" }).Count
         Medium = @($sortedFindings | Where-Object { $_.Severity -eq "Medium" }).Count
@@ -330,10 +484,11 @@ function Invoke-EventGuardScan {
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.1.0"
+        Version        = "0.2.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count
+        SuppressionsPath = $(if ($SuppressionsPath) { (Resolve-Path -LiteralPath $SuppressionsPath).Path } else { $null })
         SeveritySummary = $severitySummary
         ExitCode        = $exitCode
         Findings       = $sortedFindings

@@ -1,0 +1,10 @@
+{
+  "RuleIds": [
+    "EVG-4625-BURST"
+  ],
+  "Users": [
+    "svc_backup"
+  ],
+  "MachineNames": [],
+  "IpAddresses": []
+}
