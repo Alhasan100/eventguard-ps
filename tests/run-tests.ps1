@@ -1,12 +1,13 @@
 # File Description: Lightweight test runner for validating EventGuard-PS detections and report output.
 # Author: Alhasan Al-Hmondi
-# Version: 0.2.0
+# Version: 0.3.0
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $moduleManifestPath = Join-Path $PSScriptRoot "..\src\EventGuard.psd1"
 $samplePath = Join-Path $PSScriptRoot "..\examples\security-events.json"
+$xmlSamplePath = Join-Path $PSScriptRoot "..\examples\security-events.xml"
 $suppressionPath = Join-Path $PSScriptRoot "..\examples\suppressions.json"
 Import-Module $moduleManifestPath -Force
 
@@ -56,6 +57,7 @@ function Assert-Match {
 
 $report = Invoke-EventGuardScan -Path $samplePath
 $textReport = Format-EventGuardTextReport -Report $report
+$xmlReport = Invoke-EventGuardScan -Path $xmlSamplePath
 $suppressedReport = Invoke-EventGuardScan -Path $samplePath -SuppressionsPath $suppressionPath
 
 Assert-Equal -Actual $report.EventCount -Expected 8 -Message "Sample event count should match"
@@ -69,6 +71,10 @@ Assert-Match -Value $textReport -Pattern "Recommendation:" -Message "Analyst rec
 Assert-Match -Value $textReport -Pattern "Repeated failed logons detected" -Message "Burst detection should appear in text report"
 Assert-Match -Value $textReport -Pattern "Severity Summary: High=3; Medium=2; Low=0" -Message "Severity summary should appear in text report"
 Assert-Match -Value $textReport -Pattern "Privileged group membership changed" -Message "Privileged group change should appear in text report"
+Assert-Equal -Actual $xmlReport.EventCount -Expected 8 -Message "XML event count should match"
+Assert-Equal -Actual $xmlReport.Findings.Count -Expected 5 -Message "XML findings count should match JSON behavior"
+Assert-Equal -Actual $xmlReport.ExitCode -Expected 20 -Message "XML report should preserve severity-based exit codes"
+Assert-Equal -Actual $xmlReport.Findings[0].RuleId -Expected $report.Findings[0].RuleId -Message "XML and JSON ordering should match for the sample dataset"
 Assert-Equal -Actual $suppressedReport.Findings.Count -Expected 2 -Message "Suppression rules should reduce the finding count"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.High -Expected 0 -Message "Suppression rules should remove high severity findings"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.Medium -Expected 2 -Message "Suppression rules should retain only medium severity findings"

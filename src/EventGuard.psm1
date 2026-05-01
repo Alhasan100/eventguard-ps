@@ -1,6 +1,6 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.2.0
+# Version: 0.3.0
 
 Set-StrictMode -Version Latest
 
@@ -50,14 +50,132 @@ function Get-EventGuardRuleCatalog {
     }
 }
 
-function Import-EventGuardEvents {
+function Get-EventGuardInputFormat {
+    <#
+    .SYNOPSIS
+    Determines which input format should be used for the event file.
+
+    .DESCRIPTION
+    Uses the file extension first and falls back to lightweight content
+    inspection so analysts can process JSON or XML exports reliably.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    switch ($extension) {
+        ".json" { return "Json" }
+        ".xml" { return "Xml" }
+    }
+
+    $rawContent = Get-Content -LiteralPath $Path -Raw
+    $trimmedContent = $rawContent.TrimStart()
+
+    if ($trimmedContent.StartsWith("[")) {
+        return "Json"
+    }
+
+    if ($trimmedContent.StartsWith("<")) {
+        return "Xml"
+    }
+
+    throw "Unsupported event input format for file: $Path"
+}
+
+function Convert-EventGuardXmlEvent {
+    <#
+    .SYNOPSIS
+    Converts a Windows Event XML node into the normalized event shape.
+
+    .DESCRIPTION
+    Extracts core system metadata and named EventData fields so the
+    detection engine can reuse the same logic across JSON and XML input.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Xml.XmlElement]$EventNode
+    )
+
+    $systemNode = $EventNode.System
+    $eventDataValues = @{}
+
+    if ($EventNode.EventData) {
+        foreach ($dataNode in @($EventNode.EventData.Data)) {
+            $fieldName = [string]$dataNode.Name
+            if ([string]::IsNullOrWhiteSpace($fieldName)) {
+                continue
+            }
+
+            $eventDataValues[$fieldName] = [string]$dataNode.InnerText
+        }
+    }
+
+    return [PSCustomObject]@{
+        Timestamp          = [string]$systemNode.TimeCreated.SystemTime
+        EventId            = [int][string]$systemNode.EventID
+        MachineName        = [string]$systemNode.Computer
+        TargetUserName     = $eventDataValues["TargetUserName"]
+        IpAddress          = $eventDataValues["IpAddress"]
+        LogonType          = $eventDataValues["LogonType"]
+        Status             = $eventDataValues["Status"]
+        CallerComputerName = $eventDataValues["CallerComputerName"]
+        SubjectUserName    = $eventDataValues["SubjectUserName"]
+        GroupName          = $eventDataValues["GroupName"]
+    }
+}
+
+function Import-EventGuardJsonEvents {
     <#
     .SYNOPSIS
     Loads exported event data from a JSON file.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $rawContent = Get-Content -LiteralPath $Path -Raw
+    return @($rawContent | ConvertFrom-Json)
+}
+
+function Import-EventGuardXmlEvents {
+    <#
+    .SYNOPSIS
+    Loads exported event data from an XML file.
 
     .DESCRIPTION
-    Reads a JSON array of Windows security events, normalizes timestamps,
-    and returns the events sorted in chronological order.
+    Supports Windows Event Viewer or `wevtutil` style XML exports with
+    one or more `Event` nodes under a common root element.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    [xml]$xmlDocument = Get-Content -LiteralPath $Path -Raw
+    $eventNodes = @($xmlDocument.SelectNodes("//*[local-name()='Event']"))
+
+    if ($eventNodes.Count -eq 0) {
+        throw "No Event nodes were found in XML input: $Path"
+    }
+
+    return @($eventNodes | ForEach-Object { Convert-EventGuardXmlEvent -EventNode $_ })
+}
+
+function Import-EventGuardEvents {
+    <#
+    .SYNOPSIS
+    Loads exported event data from a supported file.
+
+    .DESCRIPTION
+    Reads JSON or XML Windows security event exports, normalizes
+    timestamps, and returns the events sorted in chronological order.
     #>
     [CmdletBinding()]
     param(
@@ -69,8 +187,12 @@ function Import-EventGuardEvents {
         throw "Event input file not found: $Path"
     }
 
-    $rawContent = Get-Content -LiteralPath $Path -Raw
-    $events = $rawContent | ConvertFrom-Json
+    $inputFormat = Get-EventGuardInputFormat -Path $Path
+    switch ($inputFormat) {
+        "Json" { $events = Import-EventGuardJsonEvents -Path $Path }
+        "Xml" { $events = Import-EventGuardXmlEvents -Path $Path }
+        default { throw "Unsupported event input format: $inputFormat" }
+    }
 
     foreach ($event in $events) {
         $event | Add-Member -NotePropertyName ParsedTimestamp -NotePropertyValue ([DateTime]::Parse($event.Timestamp)) -Force
@@ -196,6 +318,7 @@ function Remove-SuppressedEventGuardFindings {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [object[]]$Findings,
 
         [Parameter(Mandatory = $false)]
@@ -484,7 +607,7 @@ function Invoke-EventGuardScan {
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.2.0"
+        Version        = "0.3.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count

@@ -10,6 +10,7 @@ Security students and junior analysts often know Windows Event IDs in theory, bu
 
 - PowerShell 5.1+
 - Native JSON handling with no external dependencies
+- Native XML parsing for exported Windows events
 - Custom PowerShell test runner for portable validation
 
 This stack fits Windows administration, IT support, and cybersecurity operations work while staying realistic for a student portfolio.
@@ -25,6 +26,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Includes analyst recommendations in each finding
 - Supports suppression files for known-benign rules, users, hosts, or IPs
 - Supports text and JSON output formats
+- Supports JSON arrays and Windows Event XML exports as input
 - Includes sample event data for offline testing
 
 ## Project structure
@@ -61,6 +63,12 @@ JSON report:
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.json -Format Json
 ```
 
+XML input report:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.xml -Format Text
+```
+
 Report with suppressions:
 
 ```powershell
@@ -75,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 
 ## Example workflow
 
-1. Export relevant security events from a Windows host or lab VM into JSON format.
+1. Export relevant security events from a Windows host or lab VM into JSON or XML format.
 2. Run EventGuard-PS against the exported file.
 3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
 4. Use the findings as a starting point for incident triage or lab writeups.
@@ -83,7 +91,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 
 ## Future improvements
 
-- Add EVTX and XML ingestion support
+- Add EVTX ingestion support for direct `.evtx` processing
 - Add richer account and group change detections
 - Expand suppression logic with time-based exceptions and rule comments
 - Generate HTML reports for case documentation
