@@ -28,11 +28,12 @@
 - Completed: ATT&CK annotations and analyst recommendations
 - Completed: suppression support for rule IDs, users, machine names, and IP addresses
 - Completed: XML ingestion for exported Windows Event data
-- Next: expand account/group change coverage and start HTML reporting
+- Completed: HTML report export for documentation and portfolio screenshots
+- Next: expand account/group change coverage
 
 ### Day 6
-- Add HTML export for portfolio screenshots and case documentation
 - Improve documentation and examples
+- Expand account and group change coverage
 
 ### Day 7
 - Final cleanup

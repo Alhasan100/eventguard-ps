@@ -1,6 +1,6 @@
 # File Description: Lightweight test runner for validating EventGuard-PS detections and report output.
 # Author: Alhasan Al-Hmondi
-# Version: 0.3.0
+# Version: 0.4.0
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -9,6 +9,7 @@ $moduleManifestPath = Join-Path $PSScriptRoot "..\src\EventGuard.psd1"
 $samplePath = Join-Path $PSScriptRoot "..\examples\security-events.json"
 $xmlSamplePath = Join-Path $PSScriptRoot "..\examples\security-events.xml"
 $suppressionPath = Join-Path $PSScriptRoot "..\examples\suppressions.json"
+$htmlOutputPath = Join-Path $env:TEMP "eventguard-test-report.html"
 Import-Module $moduleManifestPath -Force
 
 function Assert-Equal {
@@ -57,6 +58,7 @@ function Assert-Match {
 
 $report = Invoke-EventGuardScan -Path $samplePath
 $textReport = Format-EventGuardTextReport -Report $report
+$htmlReport = Format-EventGuardHtmlReport -Report $report
 $xmlReport = Invoke-EventGuardScan -Path $xmlSamplePath
 $suppressedReport = Invoke-EventGuardScan -Path $samplePath -SuppressionsPath $suppressionPath
 
@@ -71,6 +73,9 @@ Assert-Match -Value $textReport -Pattern "Recommendation:" -Message "Analyst rec
 Assert-Match -Value $textReport -Pattern "Repeated failed logons detected" -Message "Burst detection should appear in text report"
 Assert-Match -Value $textReport -Pattern "Severity Summary: High=3; Medium=2; Low=0" -Message "Severity summary should appear in text report"
 Assert-Match -Value $textReport -Pattern "Privileged group membership changed" -Message "Privileged group change should appear in text report"
+Assert-Match -Value $htmlReport -Pattern "<!DOCTYPE html>" -Message "HTML report should be a full document"
+Assert-Match -Value $htmlReport -Pattern "EventGuard-PS Security Triage Report" -Message "HTML report title should be present"
+Assert-Match -Value $htmlReport -Pattern "Repeated failed logons detected" -Message "HTML report should include findings"
 Assert-Equal -Actual $xmlReport.EventCount -Expected 8 -Message "XML event count should match"
 Assert-Equal -Actual $xmlReport.Findings.Count -Expected 5 -Message "XML findings count should match JSON behavior"
 Assert-Equal -Actual $xmlReport.ExitCode -Expected 20 -Message "XML report should preserve severity-based exit codes"
@@ -79,5 +84,11 @@ Assert-Equal -Actual $suppressedReport.Findings.Count -Expected 2 -Message "Supp
 Assert-Equal -Actual $suppressedReport.SeveritySummary.High -Expected 0 -Message "Suppression rules should remove high severity findings"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.Medium -Expected 2 -Message "Suppression rules should retain only medium severity findings"
 Assert-Equal -Actual $suppressedReport.ExitCode -Expected 10 -Message "Exit code should reflect the highest remaining severity"
+
+& (Join-Path $PSScriptRoot "..\scripts\invoke-eventguard.ps1") -Path $samplePath -Format Html -OutputPath $htmlOutputPath | Out-Null
+Assert-Equal -Actual (Test-Path -LiteralPath $htmlOutputPath) -Expected $true -Message "CLI HTML export should write an output file"
+$savedHtmlReport = Get-Content -LiteralPath $htmlOutputPath -Raw
+Assert-Match -Value $savedHtmlReport -Pattern "Exit Code: 20" -Message "Saved HTML report should include exit code context"
+Remove-Item -LiteralPath $htmlOutputPath -Force
 
 Write-Output "All EventGuard-PS tests passed."

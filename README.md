@@ -25,7 +25,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Maps findings to MITRE ATT&CK tactics and techniques
 - Includes analyst recommendations in each finding
 - Supports suppression files for known-benign rules, users, hosts, or IPs
-- Supports text and JSON output formats
+- Supports text, JSON, and standalone HTML output formats
 - Supports JSON arrays and Windows Event XML exports as input
 - Includes sample event data for offline testing
 
@@ -69,6 +69,12 @@ XML input report:
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.xml -Format Text
 ```
 
+HTML report export:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.xml -Format Html -OutputPath .\reports\security-events.html
+```
+
 Report with suppressions:
 
 ```powershell
@@ -87,12 +93,13 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 2. Run EventGuard-PS against the exported file.
 3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
 4. Use the findings as a starting point for incident triage or lab writeups.
-5. Add suppressions for approved admin activity so recurring triage reports stay focused.
+5. Export an HTML report when you want a cleaner artifact for screenshots, documentation, or a portfolio walkthrough.
+6. Add suppressions for approved admin activity so recurring triage reports stay focused.
 
 ## Future improvements
 
 - Add EVTX ingestion support for direct `.evtx` processing
 - Add richer account and group change detections
 - Expand suppression logic with time-based exceptions and rule comments
-- Generate HTML reports for case documentation
+- Add direct EVTX ingestion support for native Windows log files
 - Add Sigma-aligned detection packs

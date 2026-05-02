@@ -2,4 +2,5 @@
 *.log
 *.bak
 *.report.json
-
+reports/*.html
+!reports/.gitkeep
