@@ -1,6 +1,6 @@
 <!-- File Description: Sample Windows Event XML export for validating EventGuard-PS XML ingestion. -->
 <!-- Author: Alhasan Al-Hmondi -->
-<!-- Version: 0.3.0 -->
+<!-- Version: 0.5.0 -->
 <Events>
   <Event>
     <System>
@@ -98,13 +98,75 @@
   <Event>
     <System>
       <Provider Name="Microsoft-Windows-Security-Auditing" />
-      <EventID>4732</EventID>
+      <EventID>4724</EventID>
       <TimeCreated SystemTime="2026-04-29T08:10:00Z" />
       <Computer>LAB-DC01</Computer>
     </System>
     <EventData>
       <Data Name="TargetUserName">svc_backup</Data>
+      <Data Name="SubjectUserName">administrator</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Security-Auditing" />
+      <EventID>4722</EventID>
+      <TimeCreated SystemTime="2026-04-29T08:11:00Z" />
+      <Computer>LAB-DC01</Computer>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">legacy_admin</Data>
+      <Data Name="SubjectUserName">administrator</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Security-Auditing" />
+      <EventID>4725</EventID>
+      <TimeCreated SystemTime="2026-04-29T08:12:00Z" />
+      <Computer>LAB-DC01</Computer>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">temp_vendor</Data>
+      <Data Name="SubjectUserName">administrator</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Security-Auditing" />
+      <EventID>4732</EventID>
+      <TimeCreated SystemTime="2026-04-29T08:13:00Z" />
+      <Computer>LAB-DC01</Computer>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">svc_backup</Data>
       <Data Name="GroupName">Administrators</Data>
+      <Data Name="SubjectUserName">administrator</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Security-Auditing" />
+      <EventID>4732</EventID>
+      <TimeCreated SystemTime="2026-04-29T08:14:00Z" />
+      <Computer>LAB-DC01</Computer>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">legacy_admin</Data>
+      <Data Name="GroupName">Remote Desktop Users</Data>
+      <Data Name="SubjectUserName">administrator</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Security-Auditing" />
+      <EventID>4733</EventID>
+      <TimeCreated SystemTime="2026-04-29T08:15:00Z" />
+      <Computer>LAB-DC01</Computer>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">breakglass_admin</Data>
+      <Data Name="GroupName">Domain Admins</Data>
       <Data Name="SubjectUserName">administrator</Data>
     </EventData>
   </Event>

@@ -21,7 +21,8 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Detects successful logons that follow recent failures
 - Detects account lockouts
 - Detects new local user creation events
-- Detects privileged group membership changes
+- Detects account password resets plus account enable and disable actions
+- Detects privileged group membership additions and removals
 - Maps findings to MITRE ATT&CK tactics and techniques
 - Includes analyst recommendations in each finding
 - Supports suppression files for known-benign rules, users, hosts, or IPs
@@ -99,7 +100,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 ## Future improvements
 
 - Add EVTX ingestion support for direct `.evtx` processing
-- Add richer account and group change detections
-- Expand suppression logic with time-based exceptions and rule comments
 - Add direct EVTX ingestion support for native Windows log files
+- Add event collection helper scripts for lab endpoints
+- Expand suppression logic with time-based exceptions and rule comments
 - Add Sigma-aligned detection packs

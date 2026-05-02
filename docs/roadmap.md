@@ -29,11 +29,12 @@
 - Completed: suppression support for rule IDs, users, machine names, and IP addresses
 - Completed: XML ingestion for exported Windows Event data
 - Completed: HTML report export for documentation and portfolio screenshots
-- Next: expand account/group change coverage
+- Completed: expanded account-state and privileged group removal detections
+- Next: improve documentation and final hardening
 
 ### Day 6
 - Improve documentation and examples
-- Expand account and group change coverage
+- Add direct EVTX workflow planning and triage notes
 
 ### Day 7
 - Final cleanup

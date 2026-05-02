@@ -59,11 +59,47 @@
   },
   {
     "Timestamp": "2026-04-29T08:10:00Z",
+    "EventId": 4724,
+    "MachineName": "LAB-DC01",
+    "TargetUserName": "svc_backup",
+    "SubjectUserName": "administrator"
+  },
+  {
+    "Timestamp": "2026-04-29T08:11:00Z",
+    "EventId": 4722,
+    "MachineName": "LAB-DC01",
+    "TargetUserName": "legacy_admin",
+    "SubjectUserName": "administrator"
+  },
+  {
+    "Timestamp": "2026-04-29T08:12:00Z",
+    "EventId": 4725,
+    "MachineName": "LAB-DC01",
+    "TargetUserName": "temp_vendor",
+    "SubjectUserName": "administrator"
+  },
+  {
+    "Timestamp": "2026-04-29T08:13:00Z",
     "EventId": 4732,
     "MachineName": "LAB-DC01",
     "TargetUserName": "svc_backup",
     "GroupName": "Administrators",
     "SubjectUserName": "administrator"
+  },
+  {
+    "Timestamp": "2026-04-29T08:14:00Z",
+    "EventId": 4732,
+    "MachineName": "LAB-DC01",
+    "TargetUserName": "legacy_admin",
+    "GroupName": "Remote Desktop Users",
+    "SubjectUserName": "administrator"
+  },
+  {
+    "Timestamp": "2026-04-29T08:15:00Z",
+    "EventId": 4733,
+    "MachineName": "LAB-DC01",
+    "TargetUserName": "breakglass_admin",
+    "GroupName": "Domain Admins",
+    "SubjectUserName": "administrator"
   }
 ]
-

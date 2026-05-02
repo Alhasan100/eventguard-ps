@@ -1,6 +1,6 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.4.0
+# Version: 0.5.0
 
 Set-StrictMode -Version Latest
 
@@ -41,11 +41,35 @@ function Get-EventGuardRuleCatalog {
             TechniqueName  = "Create Account"
             Recommendation = "Verify the request path for the new account, confirm approval records, and disable the account if it was not authorized."
         }
+        "EVG-4724-PASSWORD-RESET" = @{
+            Tactic         = "Credential Access"
+            TechniqueId    = "T1098"
+            TechniqueName  = "Account Manipulation"
+            Recommendation = "Validate the password reset request, confirm the operator identity, and review downstream authentication activity for the account."
+        }
+        "EVG-4722-ACCOUNT-ENABLED" = @{
+            Tactic         = "Persistence"
+            TechniqueId    = "T1098"
+            TechniqueName  = "Account Manipulation"
+            Recommendation = "Confirm why the account was re-enabled, verify change approval, and inspect nearby sign-in activity for unexpected use."
+        }
+        "EVG-4725-ACCOUNT-DISABLED" = @{
+            Tactic         = "Impact"
+            TechniqueId    = "T1531"
+            TechniqueName  = "Account Access Removal"
+            Recommendation = "Verify the disable action was expected and review whether it was part of incident containment, offboarding, or suspicious admin activity."
+        }
         "EVG-PRIV-GROUP-CHANGE" = @{
             Tactic         = "Privilege Escalation"
             TechniqueId    = "T1098"
             TechniqueName  = "Account Manipulation"
             Recommendation = "Review the change ticket, validate the actor identity, and remove the membership if the addition was not approved."
+        }
+        "EVG-PRIV-GROUP-REMOVAL" = @{
+            Tactic         = "Defense Evasion"
+            TechniqueId    = "T1098"
+            TechniqueName  = "Account Manipulation"
+            Recommendation = "Confirm the membership removal was expected, especially for break-glass or service accounts, and investigate if it may have been used to disrupt administration visibility."
         }
     }
 }
@@ -486,6 +510,69 @@ function Find-NewUsers {
     return @($findings)
 }
 
+function Find-AccountStateChanges {
+    <#
+    .SYNOPSIS
+    Detects password resets and account enable or disable actions.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Events
+    )
+
+    $findings = @()
+
+    foreach ($event in $Events) {
+        switch ($event.EventId) {
+            4724 {
+                $findings += New-EventGuardFinding `
+                    -RuleId "EVG-4724-PASSWORD-RESET" `
+                    -Severity "High" `
+                    -Title "Account password reset detected" `
+                    -Summary "Account $($event.TargetUserName) had its password reset by $($event.SubjectUserName)." `
+                    -Evidence ([PSCustomObject]@{
+                        UserName    = $event.TargetUserName
+                        ChangedBy   = $event.SubjectUserName
+                        Action      = "PasswordReset"
+                        TimeUtc     = $event.Timestamp
+                        MachineName = $event.MachineName
+                    })
+            }
+            4722 {
+                $findings += New-EventGuardFinding `
+                    -RuleId "EVG-4722-ACCOUNT-ENABLED" `
+                    -Severity "Medium" `
+                    -Title "Previously disabled account enabled" `
+                    -Summary "Account $($event.TargetUserName) was enabled by $($event.SubjectUserName)." `
+                    -Evidence ([PSCustomObject]@{
+                        UserName    = $event.TargetUserName
+                        ChangedBy   = $event.SubjectUserName
+                        Action      = "Enabled"
+                        TimeUtc     = $event.Timestamp
+                        MachineName = $event.MachineName
+                    })
+            }
+            4725 {
+                $findings += New-EventGuardFinding `
+                    -RuleId "EVG-4725-ACCOUNT-DISABLED" `
+                    -Severity "Medium" `
+                    -Title "Account disabled" `
+                    -Summary "Account $($event.TargetUserName) was disabled by $($event.SubjectUserName)." `
+                    -Evidence ([PSCustomObject]@{
+                        UserName    = $event.TargetUserName
+                        ChangedBy   = $event.SubjectUserName
+                        Action      = "Disabled"
+                        TimeUtc     = $event.Timestamp
+                        MachineName = $event.MachineName
+                    })
+            }
+        }
+    }
+
+    return @($findings)
+}
+
 function Find-PrivilegedGroupChanges {
     <#
     .SYNOPSIS
@@ -498,18 +585,27 @@ function Find-PrivilegedGroupChanges {
     )
 
     $privilegedGroupNames = @("Administrators", "Domain Admins", "Enterprise Admins", "Remote Desktop Users")
-    $supportedEventIds = @(4728, 4732, 4756)
+    $groupActionMap = @{
+        4728 = @{ RuleId = "EVG-PRIV-GROUP-CHANGE"; Severity = "High"; Action = "Added"; SummaryVerb = "added to" }
+        4732 = @{ RuleId = "EVG-PRIV-GROUP-CHANGE"; Severity = "High"; Action = "Added"; SummaryVerb = "added to" }
+        4756 = @{ RuleId = "EVG-PRIV-GROUP-CHANGE"; Severity = "High"; Action = "Added"; SummaryVerb = "added to" }
+        4729 = @{ RuleId = "EVG-PRIV-GROUP-REMOVAL"; Severity = "Medium"; Action = "Removed"; SummaryVerb = "removed from" }
+        4733 = @{ RuleId = "EVG-PRIV-GROUP-REMOVAL"; Severity = "Medium"; Action = "Removed"; SummaryVerb = "removed from" }
+        4757 = @{ RuleId = "EVG-PRIV-GROUP-REMOVAL"; Severity = "Medium"; Action = "Removed"; SummaryVerb = "removed from" }
+    }
 
-    $findings = foreach ($event in ($Events | Where-Object { $_.EventId -in $supportedEventIds -and $_.GroupName -in $privilegedGroupNames })) {
+    $findings = foreach ($event in ($Events | Where-Object { $groupActionMap.ContainsKey($_.EventId) -and $_.GroupName -in $privilegedGroupNames })) {
+        $actionMetadata = $groupActionMap[$event.EventId]
         New-EventGuardFinding `
-            -RuleId "EVG-PRIV-GROUP-CHANGE" `
-            -Severity "High" `
+            -RuleId $actionMetadata.RuleId `
+            -Severity $actionMetadata.Severity `
             -Title "Privileged group membership changed" `
-            -Summary "User $($event.TargetUserName) was added to privileged group $($event.GroupName) by $($event.SubjectUserName)." `
+            -Summary "User $($event.TargetUserName) was $($actionMetadata.SummaryVerb) privileged group $($event.GroupName) by $($event.SubjectUserName)." `
             -Evidence ([PSCustomObject]@{
                 UserName    = $event.TargetUserName
                 GroupName   = $event.GroupName
                 ChangedBy   = $event.SubjectUserName
+                Action      = $actionMetadata.Action
                 TimeUtc     = $event.Timestamp
                 MachineName = $event.MachineName
             })
@@ -875,6 +971,7 @@ function Invoke-EventGuardScan {
     $findings += Find-SuccessAfterFailures -Events $events
     $findings += Find-AccountLockouts -Events $events
     $findings += Find-NewUsers -Events $events
+    $findings += Find-AccountStateChanges -Events $events
     $findings += Find-PrivilegedGroupChanges -Events $events
 
     $filteredFindings = Remove-SuppressedEventGuardFindings -Findings $findings -Suppressions $suppressions
@@ -895,7 +992,7 @@ function Invoke-EventGuardScan {
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.4.0"
+        Version        = "0.5.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count
