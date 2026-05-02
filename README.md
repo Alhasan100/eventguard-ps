@@ -1,10 +1,10 @@
 # EventGuard-PS
 
-EventGuard-PS is a PowerShell-based security event triage CLI for Windows-focused blue-team workflows. It ingests exported event data, identifies high-value security findings, and produces a readable analyst report without requiring a SIEM.
+EventGuard-PS is a PowerShell-based security event triage CLI for Windows-focused blue-team workflows. I built it to help turn exported Windows security events into findings that are easier to review, explain, and document without needing a full SIEM.
 
 ## Why this project exists
 
-Security students and junior analysts often know Windows Event IDs in theory, but they need a practical tool that turns exported logs into actionable findings. EventGuard-PS demonstrates detection engineering, scripting, incident triage, and defensive automation in a format that is easy to explain during internships and interviews.
+I wanted a project that reflects the kind of work I am interested in: Windows security monitoring, scripting, and practical defensive tooling. Instead of building a generic demo, I focused on a CLI that can ingest exported event data, highlight suspicious activity, and produce outputs that are useful for triage, lab work, and documentation.
 
 ## Chosen stack
 
@@ -94,12 +94,11 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 2. Run EventGuard-PS against the exported file.
 3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
 4. Use the findings as a starting point for incident triage or lab writeups.
-5. Export an HTML report when you want a cleaner artifact for screenshots, documentation, or a portfolio walkthrough.
+5. Export an HTML report when you want a cleaner artifact for screenshots, documentation, or case notes.
 6. Add suppressions for approved admin activity so recurring triage reports stay focused.
 
 ## Future improvements
 
-- Add EVTX ingestion support for direct `.evtx` processing
 - Add direct EVTX ingestion support for native Windows log files
 - Add event collection helper scripts for lab endpoints
 - Expand suppression logic with time-based exceptions and rule comments

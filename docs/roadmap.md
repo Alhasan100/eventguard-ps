@@ -1,17 +1,17 @@
 # EventGuard-PS Roadmap
 
-## Working direction
+## Purpose
 
-This roadmap is meant to stay practical rather than rigid. The goal is to keep moving the project forward in a way that makes sense as the implementation evolves, while leaving room for new issues, better ideas, and unexpected constraints.
+This document tracks where I want to take EventGuard-PS next. It is meant to keep the project focused, while still leaving room to adjust when testing, platform limits, or better ideas change the priority.
 
-## Core priorities
+## Priorities
 
 - Keep the tool focused on realistic Windows security triage workflows
 - Improve the detection coverage without turning the project into a noisy rules dump
-- Make the reporting useful for both analyst review and portfolio presentation
-- Keep the codebase readable, testable, and easy to explain in an interview
+- Make the reporting useful for both analyst review and case documentation
+- Keep the codebase readable, testable, and easy to maintain
 
-## Progress update
+## Current status
 
 - Completed: ATT&CK annotations and analyst recommendations
 - Completed: suppression support for rule IDs, users, machine names, and IP addresses
@@ -20,14 +20,14 @@ This roadmap is meant to stay practical rather than rigid. The goal is to keep m
 - Completed: expanded account-state and privileged group removal detections
 - Current focus: improve documentation and final hardening
 
-## Likely next steps
+## Next steps
 
-- Improve the examples so the project feels closer to a realistic analyst workflow
+- Improve the examples so they reflect a cleaner analyst workflow
 - Add EVTX workflow notes or native ingestion if the environment supports it cleanly
 - Expand tests around edge cases, parsing behavior, and detection coverage
-- Tighten the README and project explanations so the portfolio story is clearer
+- Tighten the README and project explanations so the project is easier to review
 
 ## Notes
 
 - Some tasks may change once implementation details or platform limitations become clearer
-- If a better direction appears during development, the roadmap should adapt instead of pretending the original plan was perfect
+- If a better direction appears during development, the roadmap should be updated to match the work
