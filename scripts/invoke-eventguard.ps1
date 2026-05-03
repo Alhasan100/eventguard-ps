@@ -1,6 +1,6 @@
 # File Description: CLI entrypoint for running EventGuard-PS against exported Windows security events.
 # Author: Alhasan Al-Hmondi
-# Version: 0.5.0
+# Version: 0.6.0
 
 [CmdletBinding()]
 param(

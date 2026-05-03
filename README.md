@@ -27,7 +27,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Includes analyst recommendations in each finding
 - Supports suppression files for known-benign rules, users, hosts, or IPs
 - Supports text, JSON, and standalone HTML output formats
-- Supports JSON arrays and Windows Event XML exports as input
+- Supports JSON arrays, Windows Event XML exports, and native EVTX files as input
 - Includes sample event data for offline testing
 
 ## Project structure
@@ -70,6 +70,12 @@ XML input report:
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.xml -Format Text
 ```
 
+EVTX input report:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path C:\Lab\Exports\Security.evtx -Format Text
+```
+
 HTML report export:
 
 ```powershell
@@ -90,7 +96,7 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 
 ## Example workflow
 
-1. Export relevant security events from a Windows host or lab VM into JSON or XML format.
+1. Export relevant security events from a Windows host or lab VM into JSON, XML, or EVTX format.
 2. Run EventGuard-PS against the exported file.
 3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
 4. Use the findings as a starting point for incident triage or lab writeups.
@@ -99,7 +105,6 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 
 ## Future improvements
 
-- Add direct EVTX ingestion support for native Windows log files
 - Add event collection helper scripts for lab endpoints
 - Expand suppression logic with time-based exceptions and rule comments
 - Add Sigma-aligned detection packs

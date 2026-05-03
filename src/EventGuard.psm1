@@ -1,6 +1,6 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.5.0
+# Version: 0.6.0
 
 Set-StrictMode -Version Latest
 
@@ -93,6 +93,7 @@ function Get-EventGuardInputFormat {
     switch ($extension) {
         ".json" { return "Json" }
         ".xml" { return "Xml" }
+        ".evtx" { return "Evtx" }
     }
 
     $rawContent = Get-Content -LiteralPath $Path -Raw
@@ -192,6 +193,59 @@ function Import-EventGuardXmlEvents {
     return @($eventNodes | ForEach-Object { Convert-EventGuardXmlEvent -EventNode $_ })
 }
 
+function Convert-EventGuardWinEventRecord {
+    <#
+    .SYNOPSIS
+    Converts a native Windows event record into the normalized event shape.
+
+    .DESCRIPTION
+    Uses the record XML representation so EventGuard-PS can process EVTX
+    files with the same parsing path used for exported XML input.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Record
+    )
+
+    [xml]$recordXml = $Record.ToXml()
+    $eventNode = $recordXml.SelectSingleNode("//*[local-name()='Event']")
+    if ($null -eq $eventNode) {
+        throw "Unable to parse Windows event record XML."
+    }
+
+    return Convert-EventGuardXmlEvent -EventNode $eventNode
+}
+
+function Import-EventGuardEvtxEvents {
+    <#
+    .SYNOPSIS
+    Loads exported event data from an EVTX file.
+
+    .DESCRIPTION
+    Reads native Windows event log files with Get-WinEvent and converts
+    each record through the same normalized schema used for JSON and XML.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    try {
+        $records = @(Get-WinEvent -Path $Path -Oldest -ErrorAction Stop)
+    }
+    catch {
+        throw "Failed to read EVTX input '$Path'. $($_.Exception.Message)"
+    }
+
+    if ($records.Count -eq 0) {
+        throw "No event records were found in EVTX input: $Path"
+    }
+
+    return @($records | ForEach-Object { Convert-EventGuardWinEventRecord -Record $_ })
+}
+
 function Import-EventGuardEvents {
     <#
     .SYNOPSIS
@@ -215,6 +269,7 @@ function Import-EventGuardEvents {
     switch ($inputFormat) {
         "Json" { $events = Import-EventGuardJsonEvents -Path $Path }
         "Xml" { $events = Import-EventGuardXmlEvents -Path $Path }
+        "Evtx" { $events = Import-EventGuardEvtxEvents -Path $Path }
         default { throw "Unsupported event input format: $inputFormat" }
     }
 
@@ -992,7 +1047,7 @@ function Invoke-EventGuardScan {
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.5.0"
+        Version        = "0.6.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count

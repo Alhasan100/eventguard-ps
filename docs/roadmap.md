@@ -16,14 +16,14 @@ This document tracks where I want to take EventGuard-PS next. It is meant to kee
 - Completed: ATT&CK annotations and analyst recommendations
 - Completed: suppression support for rule IDs, users, machine names, and IP addresses
 - Completed: XML ingestion for exported Windows Event data
+- Completed: native EVTX ingestion support for offline Security log files
 - Completed: HTML report export for documentation and portfolio screenshots
 - Completed: expanded account-state and privileged group removal detections
-- Current focus: improve documentation and final hardening
+- Current focus: final hardening, edge-case validation, and workflow polish
 
 ## Next steps
 
 - Improve the examples so they reflect a cleaner analyst workflow
-- Add EVTX workflow notes or native ingestion if the environment supports it cleanly
 - Expand tests around edge cases, parsing behavior, and detection coverage
 - Tighten the README and project explanations so the project is easier to review
 

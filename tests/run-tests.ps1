@@ -1,6 +1,6 @@
 # File Description: Lightweight test runner for validating EventGuard-PS detections and report output.
 # Author: Alhasan Al-Hmondi
-# Version: 0.5.0
+# Version: 0.6.0
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -10,7 +10,41 @@ $samplePath = Join-Path $PSScriptRoot "..\examples\security-events.json"
 $xmlSamplePath = Join-Path $PSScriptRoot "..\examples\security-events.xml"
 $suppressionPath = Join-Path $PSScriptRoot "..\examples\suppressions.json"
 $htmlOutputPath = Join-Path $env:TEMP "eventguard-test-report.html"
+$evtxPath = Join-Path $env:TEMP "eventguard-test.evtx"
 Import-Module $moduleManifestPath -Force
+
+function Get-WinEvent {
+    <#
+    .SYNOPSIS
+    Provides a deterministic EVTX stub for the lightweight test suite.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [switch]$Oldest
+    )
+
+    if ($Path -ne $evtxPath) {
+        throw "Unexpected EVTX path requested during tests: $Path"
+    }
+
+    [xml]$xmlDocument = Get-Content -LiteralPath $xmlSamplePath -Raw
+    $eventNodes = @($xmlDocument.SelectNodes("//*[local-name()='Event']"))
+
+    return @(
+        foreach ($eventNode in $eventNodes) {
+            $fakeRecord = [PSCustomObject]@{}
+            $eventXml = $eventNode.OuterXml
+            $fakeRecord | Add-Member -MemberType NoteProperty -Name WrappedXml -Value "<Events>$eventXml</Events>"
+            $fakeRecord | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
+                return $this.WrappedXml
+            }
+            $fakeRecord
+        }
+    )
+}
 
 function Assert-Equal {
     <#
@@ -60,6 +94,8 @@ $report = Invoke-EventGuardScan -Path $samplePath
 $textReport = Format-EventGuardTextReport -Report $report
 $htmlReport = Format-EventGuardHtmlReport -Report $report
 $xmlReport = Invoke-EventGuardScan -Path $xmlSamplePath
+$null = Set-Content -LiteralPath $evtxPath -Value "stub"
+$evtxReport = Invoke-EventGuardScan -Path $evtxPath
 $suppressedReport = Invoke-EventGuardScan -Path $samplePath -SuppressionsPath $suppressionPath
 
 Assert-Equal -Actual $report.EventCount -Expected 13 -Message "Sample event count should match"
@@ -84,6 +120,10 @@ Assert-Equal -Actual $xmlReport.EventCount -Expected 13 -Message "XML event coun
 Assert-Equal -Actual $xmlReport.Findings.Count -Expected 10 -Message "XML findings count should match JSON behavior"
 Assert-Equal -Actual $xmlReport.ExitCode -Expected 20 -Message "XML report should preserve severity-based exit codes"
 Assert-Equal -Actual $xmlReport.Findings[0].RuleId -Expected $report.Findings[0].RuleId -Message "XML and JSON ordering should match for the sample dataset"
+Assert-Equal -Actual $evtxReport.EventCount -Expected 13 -Message "EVTX event count should match XML behavior"
+Assert-Equal -Actual $evtxReport.Findings.Count -Expected 10 -Message "EVTX findings count should match JSON behavior"
+Assert-Equal -Actual $evtxReport.ExitCode -Expected 20 -Message "EVTX report should preserve severity-based exit codes"
+Assert-Equal -Actual $evtxReport.Findings[-1].RuleId -Expected $report.Findings[-1].RuleId -Message "EVTX ordering should stay aligned with the sample dataset"
 Assert-Equal -Actual $suppressedReport.Findings.Count -Expected 6 -Message "Suppression rules should reduce the finding count"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.High -Expected 1 -Message "Suppression rules should leave one remaining high severity finding"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.Medium -Expected 5 -Message "Suppression rules should retain medium severity findings"
@@ -94,5 +134,6 @@ Assert-Equal -Actual (Test-Path -LiteralPath $htmlOutputPath) -Expected $true -M
 $savedHtmlReport = Get-Content -LiteralPath $htmlOutputPath -Raw
 Assert-Match -Value $savedHtmlReport -Pattern "Exit Code: 20" -Message "Saved HTML report should include exit code context"
 Remove-Item -LiteralPath $htmlOutputPath -Force
+Remove-Item -LiteralPath $evtxPath -Force
 
 Write-Output "All EventGuard-PS tests passed."
