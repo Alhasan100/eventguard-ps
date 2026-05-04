@@ -19,12 +19,13 @@ This document tracks where I want to take EventGuard-PS next. It is meant to kee
 - Completed: native EVTX ingestion support for offline Security log files
 - Completed: HTML report export for documentation and portfolio screenshots
 - Completed: expanded account-state and privileged group removal detections
-- Current focus: final hardening, edge-case validation, and workflow polish
+- Completed: Security log collection helper for JSON, XML, and EVTX exports
+- Current focus: edge-case validation, detection hardening, and workflow polish
 
 ## Next steps
 
-- Improve the examples so they reflect a cleaner analyst workflow
 - Expand tests around edge cases, parsing behavior, and detection coverage
+- Add collection refinements such as custom log names or tighter scope controls where they improve realism
 - Tighten the README and project explanations so the project is easier to review
 
 ## Notes

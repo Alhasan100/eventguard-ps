@@ -1,6 +1,6 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.6.0
+# Version: 0.7.0
 
 Set-StrictMode -Version Latest
 
@@ -244,6 +244,196 @@ function Import-EventGuardEvtxEvents {
     }
 
     return @($records | ForEach-Object { Convert-EventGuardWinEventRecord -Record $_ })
+}
+
+function Get-EventGuardDefaultCollectionEventIds {
+    <#
+    .SYNOPSIS
+    Returns the default Windows Security event IDs collected by EventGuard-PS.
+
+    .DESCRIPTION
+    Keeps collection focused on the event types that the built-in detection
+    rules currently analyze so lab exports stay concise and relevant.
+    #>
+    [CmdletBinding()]
+    param()
+
+    return @(4624, 4625, 4720, 4722, 4724, 4725, 4728, 4729, 4732, 4733, 4740, 4756, 4757)
+}
+
+function Get-EventGuardCollectionFilter {
+    <#
+    .SYNOPSIS
+    Builds the event log filter used for collection workflows.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LogName,
+
+        [Parameter(Mandatory = $true)]
+        [int[]]$EventIds,
+
+        [Parameter(Mandatory = $true)]
+        [datetime]$StartTime
+    )
+
+    return @{
+        LogName   = $LogName
+        Id        = $EventIds
+        StartTime = $StartTime
+    }
+}
+
+function Get-EventGuardCollectionQuery {
+    <#
+    .SYNOPSIS
+    Builds a Windows Event Log XPath query for EVTX export.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [int[]]$EventIds,
+
+        [Parameter(Mandatory = $true)]
+        [int]$HoursBack
+    )
+
+    $millisecondsBack = $HoursBack * 60 * 60 * 1000
+    $eventIdExpression = ($EventIds | Sort-Object -Unique | ForEach-Object { "EventID=$_"} ) -join " or "
+
+    return "*[System[TimeCreated[timediff(@SystemTime) <= $millisecondsBack] and ($eventIdExpression)]]"
+}
+
+function Get-EventGuardCollectedRecords {
+    <#
+    .SYNOPSIS
+    Retrieves Windows Security log records for export.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LogName,
+
+        [Parameter(Mandatory = $true)]
+        [int[]]$EventIds,
+
+        [Parameter(Mandatory = $true)]
+        [int]$HoursBack,
+
+        [int]$MaxEvents = 500
+    )
+
+    $startTime = (Get-Date).AddHours(-1 * $HoursBack)
+    $filterHashtable = Get-EventGuardCollectionFilter -LogName $LogName -EventIds $EventIds -StartTime $startTime
+
+    try {
+        return @(Get-WinEvent -FilterHashtable $filterHashtable -Oldest -MaxEvents $MaxEvents -ErrorAction Stop)
+    }
+    catch {
+        throw "Failed to collect Windows events from log '$LogName'. $($_.Exception.Message)"
+    }
+}
+
+function Export-EventGuardCollectedEvents {
+    <#
+    .SYNOPSIS
+    Exports recent Windows Security events into EventGuard-PS compatible files.
+
+    .DESCRIPTION
+    Provides a simple collection workflow for lab endpoints so Security
+    log data can be exported directly into JSON, XML, or EVTX artifacts.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OutputPath,
+
+        [ValidateSet("Json", "Xml", "Evtx")]
+        [string]$Format = "Json",
+
+        [string]$LogName = "Security",
+
+        [int]$HoursBack = 24,
+
+        [int[]]$EventIds = (Get-EventGuardDefaultCollectionEventIds),
+
+        [int]$MaxEvents = 500
+    )
+
+    if ($HoursBack -lt 1) {
+        throw "HoursBack must be at least 1."
+    }
+
+    if ($MaxEvents -lt 1) {
+        throw "MaxEvents must be at least 1."
+    }
+
+    $parentDirectory = Split-Path -Parent $OutputPath
+    if ($parentDirectory -and -not (Test-Path -LiteralPath $parentDirectory)) {
+        $null = New-Item -ItemType Directory -Path $parentDirectory -Force
+    }
+
+    if ($Format -eq "Evtx") {
+        $query = Get-EventGuardCollectionQuery -EventIds $EventIds -HoursBack $HoursBack
+        try {
+            & wevtutil epl $LogName $OutputPath "/q:$query" | Out-Null
+        }
+        catch {
+            throw "Failed to export EVTX data to '$OutputPath'. $($_.Exception.Message)"
+        }
+
+        return [PSCustomObject]@{
+            OutputPath    = (Resolve-Path -LiteralPath $OutputPath).Path
+            Format        = $Format
+            LogName       = $LogName
+            HoursBack     = $HoursBack
+            EventIds      = @($EventIds | Sort-Object -Unique)
+            EventCount    = $null
+            CollectionUtc = [DateTime]::UtcNow.ToString("o")
+        }
+    }
+
+    $records = Get-EventGuardCollectedRecords -LogName $LogName -EventIds $EventIds -HoursBack $HoursBack -MaxEvents $MaxEvents
+
+    if ($records.Count -eq 0) {
+        throw "No Windows events matched the requested collection criteria."
+    }
+
+    if ($Format -eq "Json") {
+        $normalizedEvents = @($records | ForEach-Object { Convert-EventGuardWinEventRecord -Record $_ })
+        $normalizedEvents | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+    }
+    else {
+        $xmlDocument = New-Object System.Xml.XmlDocument
+        $declaration = $xmlDocument.CreateXmlDeclaration("1.0", "utf-8", $null)
+        $null = $xmlDocument.AppendChild($declaration)
+        $rootNode = $xmlDocument.CreateElement("Events")
+        $null = $xmlDocument.AppendChild($rootNode)
+
+        foreach ($record in $records) {
+            [xml]$recordXml = $record.ToXml()
+            $eventNode = $recordXml.SelectSingleNode("//*[local-name()='Event']")
+            if ($null -eq $eventNode) {
+                continue
+            }
+
+            $importedNode = $xmlDocument.ImportNode($eventNode, $true)
+            $null = $rootNode.AppendChild($importedNode)
+        }
+
+        $xmlDocument.Save($OutputPath)
+    }
+
+    return [PSCustomObject]@{
+        OutputPath    = (Resolve-Path -LiteralPath $OutputPath).Path
+        Format        = $Format
+        LogName       = $LogName
+        HoursBack     = $HoursBack
+        EventIds      = @($EventIds | Sort-Object -Unique)
+        EventCount    = $records.Count
+        CollectionUtc = [DateTime]::UtcNow.ToString("o")
+    }
 }
 
 function Import-EventGuardEvents {
@@ -1047,7 +1237,7 @@ function Invoke-EventGuardScan {
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.6.0"
+        Version        = "0.7.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count
@@ -1059,6 +1249,7 @@ function Invoke-EventGuardScan {
 }
 
 Export-ModuleMember -Function @(
+    "Export-EventGuardCollectedEvents",
     "Import-EventGuardEvents",
     "Invoke-EventGuardScan",
     "Format-EventGuardTextReport",

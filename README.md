@@ -28,6 +28,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Supports suppression files for known-benign rules, users, hosts, or IPs
 - Supports text, JSON, and standalone HTML output formats
 - Supports JSON arrays, Windows Event XML exports, and native EVTX files as input
+- Includes a collection helper that exports recent Security log data from a Windows lab host into EventGuard-ready files
 - Includes sample event data for offline testing
 
 ## Project structure
@@ -76,6 +77,24 @@ EVTX input report:
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path C:\Lab\Exports\Security.evtx -Format Text
 ```
 
+Collect recent Security log events into JSON:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export-security-events.ps1 -OutputPath .\reports\lab-security-events.json -Format Json -HoursBack 12 -MaxEvents 300
+```
+
+Collect recent Security log events into XML:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export-security-events.ps1 -OutputPath .\reports\lab-security-events.xml -Format Xml -HoursBack 12
+```
+
+Collect recent Security log events into EVTX:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export-security-events.ps1 -OutputPath .\reports\lab-security-events.evtx -Format Evtx -HoursBack 12
+```
+
 HTML report export:
 
 ```powershell
@@ -96,15 +115,14 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 
 ## Example workflow
 
-1. Export relevant security events from a Windows host or lab VM into JSON, XML, or EVTX format.
+1. Use the collection helper on a Windows host or lab VM to export recent Security log activity into JSON, XML, or EVTX.
 2. Run EventGuard-PS against the exported file.
 3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
-4. Use the findings as a starting point for incident triage or lab writeups.
-5. Export an HTML report when you want a cleaner artifact for screenshots, documentation, or case notes.
-6. Add suppressions for approved admin activity so recurring triage reports stay focused.
+4. Export an HTML report when you want a cleaner artifact for screenshots, documentation, or case notes.
+5. Add suppressions for approved admin activity so recurring triage reports stay focused.
+6. Use the results as a starting point for incident triage, lab notes, or detection tuning.
 
 ## Future improvements
 
-- Add event collection helper scripts for lab endpoints
 - Expand suppression logic with time-based exceptions and rule comments
 - Add Sigma-aligned detection packs

@@ -1,6 +1,6 @@
 # File Description: Lightweight test runner for validating EventGuard-PS detections and report output.
 # Author: Alhasan Al-Hmondi
-# Version: 0.6.0
+# Version: 0.7.0
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -11,6 +11,9 @@ $xmlSamplePath = Join-Path $PSScriptRoot "..\examples\security-events.xml"
 $suppressionPath = Join-Path $PSScriptRoot "..\examples\suppressions.json"
 $htmlOutputPath = Join-Path $env:TEMP "eventguard-test-report.html"
 $evtxPath = Join-Path $env:TEMP "eventguard-test.evtx"
+$collectedJsonPath = Join-Path $env:TEMP "eventguard-collected.json"
+$collectedXmlPath = Join-Path $env:TEMP "eventguard-collected.xml"
+$collectedEvtxPath = Join-Path $env:TEMP "eventguard-collected.evtx"
 Import-Module $moduleManifestPath -Force
 
 function Get-WinEvent {
@@ -20,11 +23,35 @@ function Get-WinEvent {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [hashtable]$FilterHashtable,
+
         [string]$Path,
 
-        [switch]$Oldest
+        [switch]$Oldest,
+
+        [int]$MaxEvents
     )
+
+    if ($PSBoundParameters.ContainsKey("FilterHashtable")) {
+        $expectedIds = @(4624, 4625, 4720, 4722, 4724, 4725, 4728, 4729, 4732, 4733, 4740, 4756, 4757)
+        Assert-Equal -Actual $FilterHashtable.LogName -Expected "Security" -Message "Collection should target the Security log by default"
+        Assert-Equal -Actual ($FilterHashtable.Id -join ",") -Expected ($expectedIds -join ",") -Message "Collection should request the default event IDs"
+
+        [xml]$xmlDocument = Get-Content -LiteralPath $xmlSamplePath -Raw
+        $eventNodes = @($xmlDocument.SelectNodes("//*[local-name()='Event']"))
+
+        return @(
+            foreach ($eventNode in $eventNodes) {
+                $fakeRecord = [PSCustomObject]@{}
+                $eventXml = $eventNode.OuterXml
+                $fakeRecord | Add-Member -MemberType NoteProperty -Name WrappedXml -Value "<Events>$eventXml</Events>"
+                $fakeRecord | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
+                    return $this.WrappedXml
+                }
+                $fakeRecord
+            }
+        )
+    }
 
     if ($Path -ne $evtxPath) {
         throw "Unexpected EVTX path requested during tests: $Path"
@@ -44,6 +71,26 @@ function Get-WinEvent {
             $fakeRecord
         }
     )
+}
+
+function wevtutil {
+    <#
+    .SYNOPSIS
+    Provides a deterministic EVTX export stub for the lightweight test suite.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+
+    Assert-Equal -Actual $Arguments[0] -Expected "epl" -Message "EVTX export should use wevtutil epl"
+    Assert-Equal -Actual $Arguments[1] -Expected "Security" -Message "EVTX export should target the Security log"
+    Assert-Equal -Actual $Arguments[2] -Expected $collectedEvtxPath -Message "EVTX export should write to the requested path"
+    Assert-Match -Value $Arguments[3] -Pattern "EventID=4625" -Message "EVTX export query should include failed logons"
+    Assert-Match -Value $Arguments[3] -Pattern "timediff\(@SystemTime\)" -Message "EVTX export query should include the time filter"
+
+    Set-Content -LiteralPath $collectedEvtxPath -Value "stub" -Encoding UTF8
 }
 
 function Assert-Equal {
@@ -97,6 +144,11 @@ $xmlReport = Invoke-EventGuardScan -Path $xmlSamplePath
 $null = Set-Content -LiteralPath $evtxPath -Value "stub"
 $evtxReport = Invoke-EventGuardScan -Path $evtxPath
 $suppressedReport = Invoke-EventGuardScan -Path $samplePath -SuppressionsPath $suppressionPath
+$jsonCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedJsonPath -Format Json -HoursBack 6 -MaxEvents 50
+$xmlCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedXmlPath -Format Xml -HoursBack 6 -MaxEvents 50
+$evtxCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedEvtxPath -Format Evtx -HoursBack 6
+$collectedJsonEvents = Import-EventGuardEvents -Path $collectedJsonPath
+$collectedXmlEvents = Import-EventGuardEvents -Path $collectedXmlPath
 
 Assert-Equal -Actual $report.EventCount -Expected 13 -Message "Sample event count should match"
 Assert-Equal -Actual $report.Findings.Count -Expected 10 -Message "Sample findings count should match"
@@ -128,6 +180,13 @@ Assert-Equal -Actual $suppressedReport.Findings.Count -Expected 6 -Message "Supp
 Assert-Equal -Actual $suppressedReport.SeveritySummary.High -Expected 1 -Message "Suppression rules should leave one remaining high severity finding"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.Medium -Expected 5 -Message "Suppression rules should retain medium severity findings"
 Assert-Equal -Actual $suppressedReport.ExitCode -Expected 20 -Message "Exit code should reflect the highest remaining severity"
+Assert-Equal -Actual $jsonCollectionResult.Format -Expected "Json" -Message "JSON collection should report the selected format"
+Assert-Equal -Actual $jsonCollectionResult.EventCount -Expected 13 -Message "JSON collection should export the expected number of records"
+Assert-Equal -Actual $collectedJsonEvents.Count -Expected 13 -Message "Collected JSON should be importable by EventGuard-PS"
+Assert-Equal -Actual $xmlCollectionResult.Format -Expected "Xml" -Message "XML collection should report the selected format"
+Assert-Equal -Actual $collectedXmlEvents.Count -Expected 13 -Message "Collected XML should be importable by EventGuard-PS"
+Assert-Equal -Actual $evtxCollectionResult.Format -Expected "Evtx" -Message "EVTX collection should report the selected format"
+Assert-Equal -Actual (Test-Path -LiteralPath $collectedEvtxPath) -Expected $true -Message "EVTX collection should create an output file"
 
 & (Join-Path $PSScriptRoot "..\scripts\invoke-eventguard.ps1") -Path $samplePath -Format Html -OutputPath $htmlOutputPath | Out-Null
 Assert-Equal -Actual (Test-Path -LiteralPath $htmlOutputPath) -Expected $true -Message "CLI HTML export should write an output file"
@@ -135,5 +194,8 @@ $savedHtmlReport = Get-Content -LiteralPath $htmlOutputPath -Raw
 Assert-Match -Value $savedHtmlReport -Pattern "Exit Code: 20" -Message "Saved HTML report should include exit code context"
 Remove-Item -LiteralPath $htmlOutputPath -Force
 Remove-Item -LiteralPath $evtxPath -Force
+Remove-Item -LiteralPath $collectedJsonPath -Force
+Remove-Item -LiteralPath $collectedXmlPath -Force
+Remove-Item -LiteralPath $collectedEvtxPath -Force
 
 Write-Output "All EventGuard-PS tests passed."
