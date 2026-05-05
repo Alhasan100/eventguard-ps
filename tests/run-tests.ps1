@@ -1,6 +1,6 @@
 # File Description: Lightweight test runner for validating EventGuard-PS detections and report output.
 # Author: Alhasan Al-Hmondi
-# Version: 0.7.0
+# Version: 0.8.0
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -11,6 +11,7 @@ $xmlSamplePath = Join-Path $PSScriptRoot "..\examples\security-events.xml"
 $suppressionPath = Join-Path $PSScriptRoot "..\examples\suppressions.json"
 $htmlOutputPath = Join-Path $env:TEMP "eventguard-test-report.html"
 $evtxPath = Join-Path $env:TEMP "eventguard-test.evtx"
+$malformedJsonPath = Join-Path $env:TEMP "eventguard-malformed.json"
 $collectedJsonPath = Join-Path $env:TEMP "eventguard-collected.json"
 $collectedXmlPath = Join-Path $env:TEMP "eventguard-collected.xml"
 $collectedEvtxPath = Join-Path $env:TEMP "eventguard-collected.evtx"
@@ -144,6 +145,37 @@ $xmlReport = Invoke-EventGuardScan -Path $xmlSamplePath
 $null = Set-Content -LiteralPath $evtxPath -Value "stub"
 $evtxReport = Invoke-EventGuardScan -Path $evtxPath
 $suppressedReport = Invoke-EventGuardScan -Path $samplePath -SuppressionsPath $suppressionPath
+$malformedJson = @'
+[
+  {
+    "Timestamp": "2026-05-04T08:20:00Z",
+    "EventId": 4625,
+    "MachineName": "LAB-DC01",
+    "TargetUserName": "svc.backup",
+    "IpAddress": "10.0.0.55",
+    "Status": "0xC000006A"
+  },
+  {
+    "Timestamp": "not-a-date",
+    "EventId": 4624,
+    "TargetUserName": "student.admin"
+  },
+  {
+    "Timestamp": "2026-05-04T08:30:00Z",
+    "TargetUserName": "missing.eventid"
+  },
+  {
+    "Timestamp": "2026-05-04T08:31:00Z",
+    "EventId": "forty-two",
+    "TargetUserName": "broken.type"
+  }
+]
+'@
+Set-Content -LiteralPath $malformedJsonPath -Value $malformedJson -Encoding UTF8
+$malformedEvents = @(Import-EventGuardEvents -Path $malformedJsonPath)
+$malformedReport = Invoke-EventGuardScan -Path $malformedJsonPath
+$malformedTextReport = Format-EventGuardTextReport -Report $malformedReport
+$malformedHtmlReport = Format-EventGuardHtmlReport -Report $malformedReport
 $jsonCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedJsonPath -Format Json -HoursBack 6 -MaxEvents 50
 $xmlCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedXmlPath -Format Xml -HoursBack 6 -MaxEvents 50
 $evtxCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedEvtxPath -Format Evtx -HoursBack 6
@@ -180,6 +212,14 @@ Assert-Equal -Actual $suppressedReport.Findings.Count -Expected 6 -Message "Supp
 Assert-Equal -Actual $suppressedReport.SeveritySummary.High -Expected 1 -Message "Suppression rules should leave one remaining high severity finding"
 Assert-Equal -Actual $suppressedReport.SeveritySummary.Medium -Expected 5 -Message "Suppression rules should retain medium severity findings"
 Assert-Equal -Actual $suppressedReport.ExitCode -Expected 20 -Message "Exit code should reflect the highest remaining severity"
+Assert-Equal -Actual $malformedEvents.Count -Expected 1 -Message "Malformed input import should keep only valid records"
+Assert-Equal -Actual $malformedReport.EventCount -Expected 1 -Message "Malformed scan should count only valid records"
+Assert-Equal -Actual $malformedReport.ParseWarnings.Count -Expected 3 -Message "Malformed scan should record one warning per skipped record"
+Assert-Equal -Actual $malformedReport.Findings.Count -Expected 0 -Message "Single remaining malformed test record should not trigger detections"
+Assert-Equal -Actual $malformedReport.ExitCode -Expected 0 -Message "Malformed scan with no findings should return zero"
+Assert-Match -Value $malformedTextReport -Pattern "Parse Warnings: 3" -Message "Text report should surface parse warning counts"
+Assert-Match -Value $malformedTextReport -Pattern "Skipped Json record 2" -Message "Text report should list skipped record details"
+Assert-Match -Value $malformedHtmlReport -Pattern "Input Warnings" -Message "HTML report should include the warning section when records are skipped"
 Assert-Equal -Actual $jsonCollectionResult.Format -Expected "Json" -Message "JSON collection should report the selected format"
 Assert-Equal -Actual $jsonCollectionResult.EventCount -Expected 13 -Message "JSON collection should export the expected number of records"
 Assert-Equal -Actual $collectedJsonEvents.Count -Expected 13 -Message "Collected JSON should be importable by EventGuard-PS"
@@ -194,6 +234,7 @@ $savedHtmlReport = Get-Content -LiteralPath $htmlOutputPath -Raw
 Assert-Match -Value $savedHtmlReport -Pattern "Exit Code: 20" -Message "Saved HTML report should include exit code context"
 Remove-Item -LiteralPath $htmlOutputPath -Force
 Remove-Item -LiteralPath $evtxPath -Force
+Remove-Item -LiteralPath $malformedJsonPath -Force
 Remove-Item -LiteralPath $collectedJsonPath -Force
 Remove-Item -LiteralPath $collectedXmlPath -Force
 Remove-Item -LiteralPath $collectedEvtxPath -Force

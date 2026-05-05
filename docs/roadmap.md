@@ -20,7 +20,8 @@ This document tracks where I want to take EventGuard-PS next. It is meant to kee
 - Completed: HTML report export for documentation and portfolio screenshots
 - Completed: expanded account-state and privileged group removal detections
 - Completed: Security log collection helper for JSON, XML, and EVTX exports
-- Current focus: edge-case validation, detection hardening, and workflow polish
+- Completed: malformed-record handling with warning-aware input normalization
+- Current focus: deeper detection hardening and workflow polish
 
 ## Next steps
 

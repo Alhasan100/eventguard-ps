@@ -1,6 +1,6 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.7.0
+# Version: 0.8.0
 
 Set-StrictMode -Version Latest
 
@@ -108,6 +108,97 @@ function Get-EventGuardInputFormat {
     }
 
     throw "Unsupported event input format for file: $Path"
+}
+
+function Get-EventGuardPropertyValue {
+    <#
+    .SYNOPSIS
+    Safely reads a property from an event object.
+
+    .DESCRIPTION
+    Returns a string value when the property exists and contains data,
+    otherwise returns $null so incomplete records can be handled cleanly.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Event,
+
+        [Parameter(Mandatory = $true)]
+        [string]$PropertyName
+    )
+
+    if ($Event.PSObject.Properties.Name -notcontains $PropertyName) {
+        return $null
+    }
+
+    $value = $Event.$PropertyName
+    if ($null -eq $value) {
+        return $null
+    }
+
+    $stringValue = [string]$value
+    if ([string]::IsNullOrWhiteSpace($stringValue)) {
+        return $null
+    }
+
+    return $stringValue
+}
+
+function ConvertTo-EventGuardNormalizedEvent {
+    <#
+    .SYNOPSIS
+    Normalizes a raw event object into the EventGuard schema.
+
+    .DESCRIPTION
+    Validates required fields and parses the timestamp so malformed or
+    partial records can be skipped without stopping the full triage run.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Event,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SourceLabel
+    )
+
+    $timestamp = Get-EventGuardPropertyValue -Event $Event -PropertyName "Timestamp"
+    if (-not $timestamp) {
+        throw "Missing required Timestamp value."
+    }
+
+    try {
+        $parsedTimestamp = [DateTime]::Parse($timestamp)
+    }
+    catch {
+        throw "Invalid Timestamp value '$timestamp'."
+    }
+
+    $eventIdValue = Get-EventGuardPropertyValue -Event $Event -PropertyName "EventId"
+    if (-not $eventIdValue) {
+        throw "Missing required EventId value."
+    }
+
+    $eventId = 0
+    if (-not [int]::TryParse($eventIdValue, [ref]$eventId)) {
+        throw "Invalid EventId value '$eventIdValue'."
+    }
+
+    return [PSCustomObject]@{
+        Timestamp          = $timestamp
+        ParsedTimestamp    = $parsedTimestamp
+        EventId            = $eventId
+        MachineName        = Get-EventGuardPropertyValue -Event $Event -PropertyName "MachineName"
+        TargetUserName     = Get-EventGuardPropertyValue -Event $Event -PropertyName "TargetUserName"
+        IpAddress          = Get-EventGuardPropertyValue -Event $Event -PropertyName "IpAddress"
+        LogonType          = Get-EventGuardPropertyValue -Event $Event -PropertyName "LogonType"
+        Status             = Get-EventGuardPropertyValue -Event $Event -PropertyName "Status"
+        CallerComputerName = Get-EventGuardPropertyValue -Event $Event -PropertyName "CallerComputerName"
+        SubjectUserName    = Get-EventGuardPropertyValue -Event $Event -PropertyName "SubjectUserName"
+        GroupName          = Get-EventGuardPropertyValue -Event $Event -PropertyName "GroupName"
+        SourceLabel        = $SourceLabel
+    }
 }
 
 function Convert-EventGuardXmlEvent {
@@ -455,19 +546,67 @@ function Import-EventGuardEvents {
         throw "Event input file not found: $Path"
     }
 
+    return @((Import-EventGuardEventSet -Path $Path).Events)
+}
+
+function Import-EventGuardEventSet {
+    <#
+    .SYNOPSIS
+    Loads and validates supported event input data.
+
+    .DESCRIPTION
+    Returns normalized events plus parse warnings so malformed records do
+    not terminate the full triage workflow when valid data still exists.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Event input file not found: $Path"
+    }
+
     $inputFormat = Get-EventGuardInputFormat -Path $Path
     switch ($inputFormat) {
-        "Json" { $events = Import-EventGuardJsonEvents -Path $Path }
-        "Xml" { $events = Import-EventGuardXmlEvents -Path $Path }
-        "Evtx" { $events = Import-EventGuardEvtxEvents -Path $Path }
+        "Json" { $rawEvents = Import-EventGuardJsonEvents -Path $Path }
+        "Xml" { $rawEvents = Import-EventGuardXmlEvents -Path $Path }
+        "Evtx" { $rawEvents = Import-EventGuardEvtxEvents -Path $Path }
         default { throw "Unsupported event input format: $inputFormat" }
     }
 
-    foreach ($event in $events) {
-        $event | Add-Member -NotePropertyName ParsedTimestamp -NotePropertyValue ([DateTime]::Parse($event.Timestamp)) -Force
+    $normalizedEvents = @()
+    $parseWarnings = @()
+    $recordIndex = 0
+
+    foreach ($rawEvent in @($rawEvents)) {
+        $recordIndex += 1
+
+        try {
+            $normalizedEvents += ConvertTo-EventGuardNormalizedEvent -Event $rawEvent -SourceLabel "$inputFormat record $recordIndex"
+        }
+        catch {
+            $parseWarnings += "Skipped $inputFormat record ${recordIndex}: $($_.Exception.Message)"
+        }
     }
 
-    return @($events | Sort-Object -Property ParsedTimestamp)
+    if ($normalizedEvents.Count -eq 0) {
+        $warningSummary = if ($parseWarnings.Count -gt 0) {
+            " Parse warnings: $($parseWarnings -join ' | ')"
+        }
+        else {
+            ""
+        }
+
+        throw "No valid events were loaded from '$Path'.$warningSummary"
+    }
+
+    return [PSCustomObject]@{
+        InputFormat   = $inputFormat
+        Events        = @($normalizedEvents | Sort-Object -Property ParsedTimestamp)
+        ParseWarnings = @($parseWarnings)
+    }
 }
 
 function Import-EventGuardSuppressions {
@@ -876,11 +1015,20 @@ function Format-EventGuardTextReport {
         "EventGuard-PS Security Triage Report"
         "Input Path: $($Report.InputPath)"
         "Event Count: $($Report.EventCount)"
+        "Parse Warnings: $($Report.ParseWarnings.Count)"
         "Generated At (UTC): $($Report.GeneratedAtUtc)"
         "Finding Count: $($Report.Findings.Count)"
         "Severity Summary: $severitySummary"
         ""
     )
+
+    if ($Report.ParseWarnings.Count -gt 0) {
+        $lines += "Input Warnings:"
+        foreach ($warning in $Report.ParseWarnings) {
+            $lines += "- $warning"
+        }
+        $lines += ""
+    }
 
     if ($Report.Findings.Count -eq 0) {
         $lines += "No findings detected."
@@ -982,6 +1130,25 @@ function Format-EventGuardHtmlReport {
         $findingsMarkup = $findingSections -join [Environment]::NewLine
     }
 
+    if ($Report.ParseWarnings.Count -gt 0) {
+        $warningItems = foreach ($warning in $Report.ParseWarnings) {
+            "<li>$(ConvertTo-EventGuardHtmlEncoded -Value $warning)</li>"
+        }
+
+        $warningsMarkup = @"
+        <section class="warnings">
+            <h2>Input Warnings</h2>
+            <p class="summary">EventGuard-PS skipped malformed or incomplete records and continued with the valid events below.</p>
+            <ul>
+                $($warningItems -join [Environment]::NewLine)
+            </ul>
+        </section>
+"@
+    }
+    else {
+        $warningsMarkup = ""
+    }
+
     $suppressionsPath = if ($Report.SuppressionsPath) {
         ConvertTo-EventGuardHtmlEncoded -Value $Report.SuppressionsPath
     }
@@ -1021,7 +1188,7 @@ function Format-EventGuardHtmlReport {
             margin: 0 auto;
             padding: 32px 20px 48px;
         }
-        .hero, .finding, .empty-state {
+        .hero, .finding, .empty-state, .warnings {
             background: var(--panel);
             border: 1px solid var(--border);
             border-radius: 18px;
@@ -1030,6 +1197,11 @@ function Format-EventGuardHtmlReport {
         .hero {
             padding: 28px;
             margin-bottom: 24px;
+        }
+        .warnings {
+            padding: 22px;
+            margin-bottom: 18px;
+            border-left: 6px solid var(--medium);
         }
         h1, h2, h3, p { margin-top: 0; }
         h1 {
@@ -1085,6 +1257,12 @@ function Format-EventGuardHtmlReport {
         .findings {
             display: grid;
             gap: 18px;
+        }
+        .warnings ul {
+            margin: 0;
+            padding-left: 20px;
+            color: var(--muted);
+            line-height: 1.6;
         }
         .finding, .empty-state {
             padding: 22px;
@@ -1159,6 +1337,10 @@ function Format-EventGuardHtmlReport {
                     <span class="value">$($Report.EventCount)</span>
                 </article>
                 <article class="meta-card">
+                    <span class="label">Parse Warnings</span>
+                    <span class="value">$($Report.ParseWarnings.Count)</span>
+                </article>
+                <article class="meta-card">
                     <span class="label">Suppressions</span>
                     <span class="value">$suppressionsPath</span>
                 </article>
@@ -1179,6 +1361,7 @@ function Format-EventGuardHtmlReport {
             </div>
             <p class="footer-note">Findings: $($Report.Findings.Count) | Exit Code: $($Report.ExitCode)</p>
         </section>
+        $warningsMarkup
         <section class="findings">
             $findingsMarkup
         </section>
@@ -1205,7 +1388,8 @@ function Invoke-EventGuardScan {
         [string]$SuppressionsPath
     )
 
-    $events = Import-EventGuardEvents -Path $Path
+    $eventSet = Import-EventGuardEventSet -Path $Path
+    $events = $eventSet.Events
     $suppressions = $null
     if ($SuppressionsPath) {
         $suppressions = Import-EventGuardSuppressions -Path $SuppressionsPath
@@ -1237,10 +1421,11 @@ function Invoke-EventGuardScan {
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.7.0"
+        Version        = "0.8.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count
+        ParseWarnings  = @($eventSet.ParseWarnings)
         SuppressionsPath = $(if ($SuppressionsPath) { (Resolve-Path -LiteralPath $SuppressionsPath).Path } else { $null })
         SeveritySummary = $severitySummary
         ExitCode        = $exitCode

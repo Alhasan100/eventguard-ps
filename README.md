@@ -28,6 +28,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Supports suppression files for known-benign rules, users, hosts, or IPs
 - Supports text, JSON, and standalone HTML output formats
 - Supports JSON arrays, Windows Event XML exports, and native EVTX files as input
+- Skips malformed or incomplete records with explicit parse warnings instead of failing the whole scan
 - Includes a collection helper that exports recent Security log data from a Windows lab host into EventGuard-ready files
 - Includes sample event data for offline testing
 
@@ -120,9 +121,11 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 3. Review burst failures, suspicious successful logons, account changes, and privilege changes with the ATT&CK mapping and analyst recommendations.
 4. Export an HTML report when you want a cleaner artifact for screenshots, documentation, or case notes.
 5. Add suppressions for approved admin activity so recurring triage reports stay focused.
-6. Use the results as a starting point for incident triage, lab notes, or detection tuning.
+6. Review any parse warnings so you can spot broken exports or incomplete records before trusting the full result.
+7. Use the results as a starting point for incident triage, lab notes, or detection tuning.
 
 ## Future improvements
 
 - Expand suppression logic with time-based exceptions and rule comments
 - Add Sigma-aligned detection packs
+- Add optional strict mode for pipelines that should fail fast on any malformed input
