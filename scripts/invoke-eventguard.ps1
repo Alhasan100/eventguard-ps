@@ -1,6 +1,6 @@
 # File Description: CLI entrypoint for running EventGuard-PS against exported Windows security events.
 # Author: Alhasan Al-Hmondi
-# Version: 0.8.0
+# Version: 1.0.0
 
 [CmdletBinding()]
 param(
@@ -12,13 +12,15 @@ param(
     [ValidateSet("Text", "Json", "Html")]
     [string]$Format = "Text",
 
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [switch]$StrictParsing
 )
 
 $moduleManifestPath = Join-Path $PSScriptRoot "..\src\EventGuard.psd1"
 Import-Module $moduleManifestPath -Force
 
-$report = Invoke-EventGuardScan -Path $Path -SuppressionsPath $SuppressionsPath
+$report = Invoke-EventGuardScan -Path $Path -SuppressionsPath $SuppressionsPath -StrictParsing:$StrictParsing
 
 if ($Format -eq "Json") {
     $jsonOutput = $report | ConvertTo-Json -Depth 6

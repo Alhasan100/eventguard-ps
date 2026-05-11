@@ -1,6 +1,6 @@
 # File Description: Lightweight test runner for validating EventGuard-PS detections and report output.
 # Author: Alhasan Al-Hmondi
-# Version: 0.8.0
+# Version: 1.0.0
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -174,6 +174,7 @@ $malformedJson = @'
 Set-Content -LiteralPath $malformedJsonPath -Value $malformedJson -Encoding UTF8
 $malformedEvents = @(Import-EventGuardEvents -Path $malformedJsonPath)
 $malformedReport = Invoke-EventGuardScan -Path $malformedJsonPath
+$strictMalformedReport = Invoke-EventGuardScan -Path $malformedJsonPath -StrictParsing
 $malformedTextReport = Format-EventGuardTextReport -Report $malformedReport
 $malformedHtmlReport = Format-EventGuardHtmlReport -Report $malformedReport
 $jsonCollectionResult = Export-EventGuardCollectedEvents -OutputPath $collectedJsonPath -Format Json -HoursBack 6 -MaxEvents 50
@@ -217,6 +218,8 @@ Assert-Equal -Actual $malformedReport.EventCount -Expected 1 -Message "Malformed
 Assert-Equal -Actual $malformedReport.ParseWarnings.Count -Expected 3 -Message "Malformed scan should record one warning per skipped record"
 Assert-Equal -Actual $malformedReport.Findings.Count -Expected 0 -Message "Single remaining malformed test record should not trigger detections"
 Assert-Equal -Actual $malformedReport.ExitCode -Expected 0 -Message "Malformed scan with no findings should return zero"
+Assert-Equal -Actual $strictMalformedReport.StrictParsing -Expected $true -Message "Strict parsing flag should be preserved in the report"
+Assert-Equal -Actual $strictMalformedReport.ExitCode -Expected 5 -Message "Strict parsing should return a warning exit code when records are skipped"
 Assert-Match -Value $malformedTextReport -Pattern "Parse Warnings: 3" -Message "Text report should surface parse warning counts"
 Assert-Match -Value $malformedTextReport -Pattern "Skipped Json record 2" -Message "Text report should list skipped record details"
 Assert-Match -Value $malformedHtmlReport -Pattern "Input Warnings" -Message "HTML report should include the warning section when records are skipped"
@@ -232,6 +235,8 @@ Assert-Equal -Actual (Test-Path -LiteralPath $collectedEvtxPath) -Expected $true
 Assert-Equal -Actual (Test-Path -LiteralPath $htmlOutputPath) -Expected $true -Message "CLI HTML export should write an output file"
 $savedHtmlReport = Get-Content -LiteralPath $htmlOutputPath -Raw
 Assert-Match -Value $savedHtmlReport -Pattern "Exit Code: 20" -Message "Saved HTML report should include exit code context"
+& (Join-Path $PSScriptRoot "..\scripts\invoke-eventguard.ps1") -Path $malformedJsonPath -Format Text -StrictParsing | Out-Null
+Assert-Equal -Actual $LASTEXITCODE -Expected 5 -Message "CLI strict parsing should return warning exit code for skipped records"
 Remove-Item -LiteralPath $htmlOutputPath -Force
 Remove-Item -LiteralPath $evtxPath -Force
 Remove-Item -LiteralPath $malformedJsonPath -Force

@@ -1,8 +1,8 @@
 # EventGuard-PS Roadmap
 
-## Purpose
+## Current State
 
-This document tracks where I want to take EventGuard-PS next. It is meant to keep the project focused, while still leaving room to adjust when testing, platform limits, or better ideas change the priority.
+EventGuard-PS now has the core shape I wanted for a first finished version: Windows Security event ingestion, detection logic, ATT&CK context, suppression support, text/JSON/HTML reporting, collection helpers, malformed-record handling, strict parsing mode, and regression tests.
 
 ## Priorities
 
@@ -11,7 +11,7 @@ This document tracks where I want to take EventGuard-PS next. It is meant to kee
 - Make the reporting useful for both analyst review and case documentation
 - Keep the codebase readable, testable, and easy to maintain
 
-## Current status
+## What Is Done
 
 - Completed: ATT&CK annotations and analyst recommendations
 - Completed: suppression support for rule IDs, users, machine names, and IP addresses
@@ -21,13 +21,14 @@ This document tracks where I want to take EventGuard-PS next. It is meant to kee
 - Completed: expanded account-state and privileged group removal detections
 - Completed: Security log collection helper for JSON, XML, and EVTX exports
 - Completed: malformed-record handling with warning-aware input normalization
-- Current focus: deeper detection hardening and workflow polish
+- Completed: strict parsing mode for automation workflows that should fail on skipped records
+- Completed: repository polish with license, tags, and a clearer README
 
-## Next steps
+## Practical Next Steps
 
 - Expand tests around edge cases, parsing behavior, and detection coverage
 - Add collection refinements such as custom log names or tighter scope controls where they improve realism
-- Tighten the README and project explanations so the project is easier to review
+- Add CSV export only if spreadsheet handoff becomes useful
 
 ## Notes
 

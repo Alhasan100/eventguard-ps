@@ -1,6 +1,6 @@
 # File Description: Core module functions for loading exported Windows event data and producing security triage findings.
 # Author: Alhasan Al-Hmondi
-# Version: 0.8.0
+# Version: 1.0.0
 
 Set-StrictMode -Version Latest
 
@@ -1385,7 +1385,9 @@ function Invoke-EventGuardScan {
         [Parameter(Mandatory = $true)]
         [string]$Path,
 
-        [string]$SuppressionsPath
+        [string]$SuppressionsPath,
+
+        [switch]$StrictParsing
     )
 
     $eventSet = Import-EventGuardEventSet -Path $Path
@@ -1418,14 +1420,18 @@ function Invoke-EventGuardScan {
     elseif ($severitySummary.Medium -gt 0) {
         $exitCode = 10
     }
+    elseif ($StrictParsing -and $eventSet.ParseWarnings.Count -gt 0) {
+        $exitCode = 5
+    }
 
     return [PSCustomObject]@{
         ToolName       = "EventGuard-PS"
-        Version        = "0.8.0"
+        Version        = "1.0.0"
         InputPath      = (Resolve-Path -LiteralPath $Path).Path
         GeneratedAtUtc = [DateTime]::UtcNow.ToString("o")
         EventCount     = $events.Count
         ParseWarnings  = @($eventSet.ParseWarnings)
+        StrictParsing  = [bool]$StrictParsing
         SuppressionsPath = $(if ($SuppressionsPath) { (Resolve-Path -LiteralPath $SuppressionsPath).Path } else { $null })
         SeveritySummary = $severitySummary
         ExitCode        = $exitCode

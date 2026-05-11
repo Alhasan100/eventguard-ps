@@ -1,6 +1,10 @@
 # EventGuard-PS
 
-EventGuard-PS is a PowerShell-based security event triage CLI for Windows-focused blue-team workflows. I built it to help turn exported Windows security events into findings that are easier to review, explain, and document without needing a full SIEM.
+**Version:** 1.0.0 | **Author:** Alhasan Al-Hmondi
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+EventGuard-PS is a PowerShell-based security event triage CLI for Windows-focused blue-team workflows. It turns exported Windows Security events into findings that are easier to review, explain, and document without needing a full SIEM.
 
 ## Why this project exists
 
@@ -31,6 +35,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 - Skips malformed or incomplete records with explicit parse warnings instead of failing the whole scan
 - Includes a collection helper that exports recent Security log data from a Windows lab host into EventGuard-ready files
 - Includes sample event data for offline testing
+- Supports strict parsing mode for automation workflows that should fail when records are skipped
 
 ## Project structure
 
@@ -38,6 +43,7 @@ This stack fits Windows administration, IT support, and cybersecurity operations
 eventguard-ps/
   docs/
   examples/
+  LICENSE
   scripts/
   src/
   tests/
@@ -75,7 +81,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .
 EVTX input report:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path C:\Lab\Exports\Security.evtx -Format Text
+powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\exports\Security.evtx -Format Text
 ```
 
 Collect recent Security log events into JSON:
@@ -108,6 +114,12 @@ Report with suppressions:
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.json -SuppressionsPath .\examples\suppressions.json -Format Text
 ```
 
+Strict parsing mode:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\invoke-eventguard.ps1 -Path .\examples\security-events.json -StrictParsing
+```
+
 Run tests:
 
 ```powershell
@@ -124,8 +136,16 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 6. Review any parse warnings so you can spot broken exports or incomplete records before trusting the full result.
 7. Use the results as a starting point for incident triage, lab notes, or detection tuning.
 
+## Final scope
+
+This version is intentionally focused on Windows Security event triage. It covers ingestion, detection, suppression, reporting, collection helpers, malformed-record handling, and automation-friendly exit codes without turning into a large SIEM replacement.
+
 ## Future improvements
 
 - Expand suppression logic with time-based exceptions and rule comments
 - Add Sigma-aligned detection packs
-- Add optional strict mode for pipelines that should fail fast on any malformed input
+- Add CSV export if spreadsheet handoff becomes useful
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See `LICENSE` for the full license text.

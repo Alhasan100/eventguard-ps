@@ -1,6 +1,6 @@
 # File Description: Collection helper for exporting recent Windows Security events into EventGuard-PS input formats.
 # Author: Alhasan Al-Hmondi
-# Version: 0.7.0
+# Version: 1.0.0
 
 [CmdletBinding()]
 param(
